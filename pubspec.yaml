@@ -1,0 +1,66 @@
+
+# アプリの基本情報
+name: rental_monita
+description: レンタルモニ太 Flutter UI prototype
+publish_to: 'none'
+version: 1.0.0+1
+
+# 使用するDartのバージョン
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+# アプリの動作に必要なパッケージ
+dependencies:
+  flutter_bluetooth_serial_plus: ^0.5.6
+  # Flutter本体
+  flutter:
+    sdk: flutter
+
+  # QRコード読み取り機能
+  mobile_scanner: ^7.4.2
+
+  # Firebaseの初期化に使用
+  firebase_core: ^4.2.1
+
+  # Firebase Cloud Messaging（プッシュ通知）に使用
+  firebase_messaging: ^16.0.3
+
+  # スマホの通知表示に使用
+  flutter_local_notifications: ^19.4.2
+  shared_preferences: ^2.5.6
+  http: ^1.6.0
+dev_dependencies:
+  # Flutterのテスト機能
+  flutter_test:
+    sdk: flutter
+
+  # Dartコードの品質チェック
+  flutter_lints: ^5.0.0
+
+  # アプリアイコンの生成
+  flutter_launcher_icons: ^0.13.1
+
+# Flutterの設定
+flutter:
+  # Material Designのアイコンを有効化
+  uses-material-design: true
+
+# アプリアイコンの設定
+flutter_launcher_icons:
+  # Android用アイコンの名前
+  android: "launcher_icon"
+
+  # iOS用アイコンも生成
+  ios: true
+
+  # 元になるアイコン画像
+  image_path: "icon_images/icon.png"
+
+  # Androidの最低対応SDK
+  min_sdk_android: 21
+
+  # Androidのアダプティブアイコンの背景色
+  adaptive_icon_background: "#ffffff"
+
+  # Androidのアダプティブアイコンの前景画像
+  adaptive_icon_foreground: "icon_images/icon.png"
