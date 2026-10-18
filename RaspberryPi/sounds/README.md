@@ -1,0 +1,1 @@
+take_monita.wav（貸出案内）、return_complete.wav（返却完了音声）を置くフォルダです。

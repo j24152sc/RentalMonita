@@ -1,0 +1,283 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>モニ太 返却</title>
+
+  <!-- QRコード読み取りライブラリ -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 12px;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 8px 0 16px;
+      font-size: 22px;
+    }
+
+    #reader {
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+      overflow: hidden;
+      background: #222;
+      border-radius: 10px;
+    }
+
+    #reader__dashboard,
+    #reader__status_span {
+      color: white;
+    }
+
+    #message {
+      padding: 14px 4px;
+      font-size: 18px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    #startButton {
+      padding: 12px 24px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #2F8A55;
+      color: white;
+    }
+
+    #startButton:disabled {
+      opacity: 0.6;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>モニ太 返却</h1>
+
+  <!-- カメラ映像とQRコード読み取り画面 -->
+  <div id="reader"></div>
+
+  <div id="message">カメラを準備しています…</div>
+
+  <button id="startButton" hidden>
+    カメラを起動
+  </button>
+
+  <script>
+    const message = document.getElementById("message");
+    const startButton = document.getElementById("startButton");
+
+    // 返却対象となるモニ太の識別番号
+    const MONITA_ID = "TUIS-MONI-001";
+
+    // 返却サーバーに接続するための設定
+    let qrScanner = null;
+    let scanning = false;
+    let processing = false;
+    let returned = false;
+
+    // カメラを利用できない場合に理由と再試行ボタンを表示する
+    function showCameraError(text) {
+      message.textContent = text;
+      startButton.hidden = false;
+      startButton.disabled = false;
+    }
+
+    // カメラを停止する
+    async function stopCamera() {
+      if (!qrScanner || !scanning) {
+        return;
+      }
+
+      try {
+        await qrScanner.stop();
+      } catch (error) {
+        console.warn("カメラ停止時の情報:", error);
+      }
+
+      scanning = false;
+    }
+
+    // カメラを起動してQRコードの読み取りを開始する
+    async function startCamera() {
+      if (scanning || processing || returned) {
+        return;
+      }
+
+      startButton.disabled = true;
+      startButton.hidden = true;
+      message.textContent = "カメラを起動しています…";
+
+      // 読み取りライブラリが読み込まれたか確認する
+      if (typeof Html5Qrcode === "undefined") {
+        showCameraError(
+          "QRコード読み取り機能を読み込めません。インターネット接続を確認してください。"
+        );
+        return;
+      }
+
+      // ブラウザがカメラ機能に対応しているか確認する
+      if (!navigator.mediaDevices?.getUserMedia) {
+        showCameraError(
+          "ブラウザがカメラを利用できません。HTTPS接続が必要な場合があります。"
+        );
+        return;
+      }
+
+      // カメラを使うには安全な接続が必要
+      if (!window.isSecureContext) {
+        showCameraError(
+          "カメラを使うには安全な接続が必要です。HTTPS接続を設定してください。"
+        );
+        return;
+      }
+
+      try {
+        qrScanner = new Html5Qrcode("reader");
+
+        // 背面カメラを優先して読み取る
+        await qrScanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: function(viewWidth, viewHeight) {
+              const size = Math.floor(
+                Math.min(viewWidth, viewHeight, 280)
+              );
+
+              return {
+                width: size,
+                height: size
+              };
+            },
+            aspectRatio: 1.0
+          },
+          async function(decodedText) {
+            // 返却処理中の重複読み取りを防ぐ
+            if (processing || returned || !scanning) {
+              return;
+            }
+
+            processing = true;
+            await checkReturn(decodedText);
+          },
+          function() {
+            // QRコードがまだ見つからない場合は何も表示しない
+          }
+        );
+
+        scanning = true;
+        message.textContent =
+          "モニ太のQRコードを読み取ってください。";
+
+      } catch (error) {
+        console.error("カメラ起動エラー:", error);
+
+        if (qrScanner) {
+          try {
+            await qrScanner.clear();
+          } catch (_) {
+            // 画面の後片付けに失敗してもエラー表示を続ける
+          }
+
+          qrScanner = null;
+        }
+
+        scanning = false;
+
+        if (error.name === "NotAllowedError") {
+          showCameraError(
+            "カメラが許可されていません。ブラウザのカメラ設定を確認してください。"
+          );
+        } else if (error.name === "NotFoundError") {
+          showCameraError(
+            "カメラが見つかりません。カメラが使用できるか確認してください。"
+          );
+        } else {
+          showCameraError(
+            "カメラを起動できません。HTTPS接続、カメラの許可、他のアプリによる使用を確認してください。"
+          );
+        }
+      }
+    }
+
+    // QRコードを返却サーバーへ送信して結果を確認する
+    async function checkReturn(qrId) {
+      message.textContent = "返却を確認しています…";
+
+      try {
+        // 読み取ったIDが登録済みのものか確認する
+        if (qrId.trim() !== MONITA_ID) {
+          showReturnFailure();
+          return;
+        }
+
+        const response = await fetch("/api/return", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            qr_id: qrId.trim()
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success === true) {
+          // 返却完了後は再読み取りを行わない
+          returned = true;
+          message.textContent = "返却が完了しました。";
+
+          await stopCamera();
+
+          startButton.hidden = true;
+          processing = false;
+
+        } else {
+          showReturnFailure();
+        }
+
+      } catch (error) {
+        console.error("返却処理エラー:", error);
+        showReturnFailure();
+      }
+    }
+
+    // QRコードが違う場合や返却に失敗した場合の表示
+    function showReturnFailure() {
+      message.textContent =
+        "返却を確認できませんでした。入れなおしてください。";
+
+      // 少し待ってから再読み取りできるようにする
+      setTimeout(() => {
+        processing = false;
+
+        if (scanning && !returned) {
+          message.textContent =
+            "モニ太のQRコードを読み取ってください。";
+        }
+      }, 2500);
+    }
+
+    // ボタンからカメラを再起動できるようにする
+    startButton.addEventListener("click", startCamera);
+
+    // ページを開いたらカメラ起動を試みる
+    startCamera();
+  </script>
+</body>
+</html>

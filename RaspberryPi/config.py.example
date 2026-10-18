@@ -1,0 +1,6 @@
+# この値をconfig.pyへ反映し、Pi 5の実際のLAN IPを設定する。
+import os
+PI5_HOST = os.getenv("MONITA_PI5_HOST", "192.168.1.100")  # Pi 5の実IPに変更
+PI5_PORT = int(os.getenv("MONITA_PI5_PORT", "8765"))
+MONITA_ID = os.getenv("MONITA_ID", "TUIS-MONI-001")
+SOCKET_RETRY_SECONDS = 1
